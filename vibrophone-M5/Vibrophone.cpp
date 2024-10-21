@@ -1,34 +1,45 @@
 #include "Vibrophone.h"
 
-Vibrophone::Vibrophone(vibrophone_mode functionning_mode, unsigned int default_frequency, String bluetooth_name)
-  : mode(functionning_mode),
-    freq(Freq{ default_frequency, GPIO_NUM_26 }),
-    blue(Blue{ bluetooth_name }) {
-  M5.begin();
-
+Vibrophone::Vibrophone(vibrophone_mode functionning_mode)
+ : mode(functionning_mode) {
   pinMode(MOL1, INPUT);
   pinMode(MOL2, INPUT);
+}
+
+void Vibrophone::start(unsigned int default_frequency, String bluetooth_name) {
+  M5.begin();
+  
+  blue_setup("Vibro Machin");
+  freq_setup(default_frequency);
+  
+  if (mode == vibrophone_mode::VIBRO_FREQUENCY)
+    blue_enable();
+  else if (mode == vibrophone_mode::VIBRO_FREQUENCY)
+    freq_enable();
 }
 
 void Vibrophone::update_mode() {
   M5.update();
   if (M5.BtnA.isPressed() && mode == vibrophone_mode::VIBRO_BLUETOOTH) {
-    blue.disable();
-    freq.enable();
+    blue_disable();
+    freq_enable();
     mode = vibrophone_mode::VIBRO_FREQUENCY;
   } else if (M5.BtnA.isPressed() && mode == vibrophone_mode::VIBRO_FREQUENCY) {
-    freq.disable();
-    blue.enable();
+    freq_disable();
+    blue_enable();
     mode = vibrophone_mode::VIBRO_BLUETOOTH;
   }
 }
 
 void Vibrophone::update_output() {
+  unsigned int freq_control = (analogRead(MOL2) * 90 / 4045) + 20;
+  unsigned int vol_control = analogRead(MOL1) * 100 / 4045;
   if (mode == vibrophone_mode::VIBRO_BLUETOOTH) {
-    blue.update();
-    blue.display();
+    blue_update(freq_control, vol_control);
+    blue_display();
   } else if (mode == vibrophone_mode::VIBRO_FREQUENCY) {
-    freq.update((analogRead(MOL2) * 50 / 2045) + 30);
-    freq.display();
+    freq_update(freq_control, vol_control);
+    freq_display();
   }
+
 }

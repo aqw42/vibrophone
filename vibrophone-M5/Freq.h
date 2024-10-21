@@ -3,21 +3,9 @@
 #include <M5StickC.h>
 #include <DacESP32.h>
 
+void freq_setup(unsigned int f);
 
-class Freq {
-private:
-  unsigned int freq;
-  DacESP32 dac1;
-
-public:
-  Freq(unsigned int f, gpio_num_t pin);
-  Freq(const Freq &) = delete;
-  Freq &operator=(const Freq &) = delete;
-  Freq(Freq &&);
-  Freq &operator=(Freq &&) = delete;
-
-  void enable();
-  void disable();
-  void update(unsigned int freq);
-  void display();
-};
+void freq_enable();
+void freq_disable();
+void freq_update(unsigned int freq_control, unsigned int vol_control);
+void freq_display();

@@ -4,21 +4,8 @@
 #include "AudioTools.h"
 #include "BluetoothA2DPSink.h"
 
-class Blue {
-private:
-  AnalogAudioStream out;
-  String name;
-  BluetoothA2DPSink a2dp_sink;
-
-public:
-  Blue(String n);
-  Blue(const Blue &)            = delete;
-  Blue &operator=(const Blue &) = delete;
-  Blue(Blue &&);
-  Blue &operator=(Blue &&)      = delete;
-
-  void enable();
-  void disable();
-  void update();
-  void display();
-};
+void blue_setup(String n);
+void blue_enable();
+void blue_disable();
+void blue_update(unsigned int freq_control, unsigned int vol_control);
+void blue_display();

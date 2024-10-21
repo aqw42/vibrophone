@@ -8,6 +8,8 @@
 #define MOL1 0
 #define MOL2 36
 
+#define VERSION_NUMBER 0.3
+
 enum class vibrophone_mode : bool
 {
   VIBRO_FREQUENCY,
@@ -17,12 +19,11 @@ enum class vibrophone_mode : bool
 class Vibrophone {
 private:
   vibrophone_mode mode;
-  Freq freq;
-  Blue blue;
 
 public:
-  Vibrophone(vibrophone_mode functionning_mode, unsigned int default_frequency, String bluetooth_name);
+  Vibrophone(vibrophone_mode functionning_mode);
 
+  void start(unsigned int default_frequency, String bluetooth_name);
   void update_mode();
   void update_output();
 };

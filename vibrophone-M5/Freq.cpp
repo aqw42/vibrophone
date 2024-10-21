@@ -1,31 +1,57 @@
+#include "Vibrophone.h"
 #include "Freq.h"
 
-Freq::Freq(unsigned int f, gpio_num_t pin)
-  : freq(f), dac1(DacESP32(pin)) {}
+DacESP32 dac1(GPIO_NUM_26);
+unsigned int freq;
+unsigned int vol;
 
-Freq::Freq(Freq &&other) 
-  : freq(other.freq), dac1(other.dac1) {}
+void freq_setup(unsigned int f) {
+  freq = f;
+}
 
-void Freq::enable() {
+void freq_enable() {
   dac1.enable();
   dac1.outputCW(freq);
 }
 
-void Freq::disable() {
+void freq_disable() {
   dac1.disable();
 }
 
-void Freq::update(unsigned int freq_control) {
+void freq_update(unsigned int freq_control, unsigned int vol_control) {
   freq = freq_control;
   static unsigned int old_freq = 0;
-  if (freq != old_freq)
-  {
-    dac1.outputCW(freq);
+  if (freq != old_freq) {
+    dac1.setCwFrequency(freq);
     old_freq = freq;
+  }
+
+  vol = vol_control;
+  static unsigned int old_vol = 0;
+  if (vol != old_vol) {
+    dac_cw_scale_t scale = DAC_CW_SCALE_8;
+    switch (vol / 25)
+    {
+      case 0:
+        scale = DAC_CW_SCALE_1;
+      break;
+      case 1:
+        scale = DAC_CW_SCALE_2;
+      break;
+      case 2:
+        scale = DAC_CW_SCALE_4;
+      break;
+      case 3:
+        scale = DAC_CW_SCALE_8;
+      break;
+    }
+
+    dac1.setCwScale(scale);
+    old_vol = vol;
   }
 }
 
-void Freq::display() {
+void freq_display() {
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0);
   M5.Lcd.setRotation(1);
@@ -44,5 +70,8 @@ void Freq::display() {
 
   M5.Lcd.println("");
   M5.Lcd.println("");
+  M5.Lcd.print("V");
+  M5.Lcd.print(VERSION_NUMBER);
+  M5.Lcd.print(" ");
   M5.Lcd.println("Press to switch mode");
 }
