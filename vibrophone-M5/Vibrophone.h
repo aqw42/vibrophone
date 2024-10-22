@@ -8,7 +8,14 @@
 #define MOL1 0
 #define MOL2 36
 
-#define VERSION_NUMBER 0.3
+/* CHANGELOG
+0.1 : First version, freq+bt, no controls, no crossover
+0.2 : Rework, basic functionning
+0.3 : Volume and freq Controls for generator and a2dp, no crossver 
+0.4 : Crossover implemented
+0.5 : Rework / polishing, make the frequency generator use audiotools library
+*/
+#define VERSION_NUMBER 0.4
 
 enum class vibrophone_mode : bool
 {
