@@ -1,80 +1,75 @@
 #include <Arduino.h>
+#include <M5StickC.h>
+#include "AudioTools.h"
+#include "BluetoothA2DPSink.h"
+
 #include "Blue.h"
-#include "Vibrophone.h"
+#include "config.h"
 
-String name;
 
-AnalogAudioStream out;
+extern VolumeStream out;
+extern AudioInfo info;
+
 Equilizer3Bands eq(out);
 BluetoothA2DPSink a2dp_sink;
 
-unsigned int blue_freq;
-unsigned int blue_vol;
+const int buffer_size = 80;
 
-void a2dp_cb(const uint8_t *data, uint32_t len)
+void a2dp_cb(const uint8_t *data, uint32_t length)
 {
-  eq.write(data, len);
+  int count = length / buffer_size + 1;
+  for (int j = 0; j < count; j++)
+  {
+    const uint8_t *start = data + (j * buffer_size);
+    const uint8_t *end = min(data + length, start + buffer_size);
+    int len = end - start;
+    if (len > 0)
+    {
+      eq.write(start, len);
+    }
+  }
 }
 
-void blue_setup(String n) {
-  name = n;
+void blue_enable()
+{
   a2dp_sink.set_stream_reader(a2dp_cb, false);
-}
-
-void blue_enable() {
-  auto cfg_out = out.defaultConfig();
-  cfg_out.channels = 2;
-  cfg_out.bits_per_sample = 16;
-  cfg_out.sample_rate = 44100;
-  out.begin(cfg_out);
 
   auto &cfg_eq = eq.defaultConfig();
+  cfg_eq.copyFrom(info);
+
   cfg_eq.gain_low = 1;
-  cfg_eq.freq_low = 100;
+  cfg_eq.freq_low = DEFAULT_CROSSOVER;
   cfg_eq.gain_medium = 0;
   cfg_eq.gain_high = 0;
-  cfg_eq.channels = 2;
-  cfg_eq.bits_per_sample = 16;
-  cfg_eq.sample_rate = 44100;
+
   eq.begin(cfg_eq);
 
+  String name = DEFAULT_BT_NAME + " " + String(VERSION_NUMBER);
   a2dp_sink.start(name.c_str(), true);
 }
 
-void blue_disable() {
+void blue_disable()
+{
   a2dp_sink.end();
   eq.end();
-  out.end();
 }
 
-void blue_update(unsigned int freq_control, unsigned int vol_control) {
-  blue_freq = freq_control;
-  static unsigned int old_freq = 0;
-  if (abs(static_cast<int>(blue_freq - old_freq)) > 2) {
-    auto &cfg = eq.config();
-    cfg.freq_low = blue_freq;
-    eq.begin(cfg);
-    old_freq = blue_freq;
-  }
-
-  blue_vol = vol_control;
-  static unsigned int old_vol = 0;
-  if (abs(static_cast<int>(blue_vol - old_vol)) > 2) {
-    a2dp_sink.set_volume(blue_vol);
-    old_vol = blue_vol;
-  }
+void blue_update(unsigned int freq)
+{
+  auto &cfg = eq.config();
+  cfg.freq_low = freq;
+  eq.begin(cfg);
 }
 
-void blue_display() {
+void blue_display()
+{
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0);
   M5.Lcd.setRotation(1);
   M5.Lcd.setTextSize(2);
 
-
   M5.Lcd.println("Bluetooth");
   M5.Lcd.println("");
-
 
   M5.Lcd.setTextSize(2);
 

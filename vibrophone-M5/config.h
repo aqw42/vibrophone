@@ -1,10 +1,5 @@
 #pragma once
 
-#include <M5StickC.h>
-
-#include "Freq.h"
-#include "Blue.h"
-
 #define MOL1 0
 #define MOL2 36
 
@@ -14,8 +9,9 @@
 0.3 : Volume and freq Controls for generator and a2dp, no crossver 
 0.4 : Crossover implemented
 0.5 : Rework / polishing, make the frequency generator use audiotools library
+0.6 : More polishing, adding global volume control
 */
-#define VERSION_NUMBER 0.4
+#define VERSION_NUMBER 0.6
 
 enum class vibrophone_mode : bool
 {
@@ -23,14 +19,12 @@ enum class vibrophone_mode : bool
   VIBRO_BLUETOOTH
 };
 
-class Vibrophone {
-private:
-  vibrophone_mode mode;
+#define DEFAULT_MODE vibrophone_mode::VIBRO_BLUETOOTH
 
-public:
-  Vibrophone(vibrophone_mode functionning_mode);
+#define MIN_FREQ 1
+#define MAX_FREQ 100
 
-  void start(unsigned int default_frequency, String bluetooth_name);
-  void update_mode();
-  void update_output();
-};
+#define DEFAULT_CROSSOVER 100
+#define DEFAULT_FREQ 100
+
+#define DEFAULT_BT_NAME "Vibro"

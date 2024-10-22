@@ -1,57 +1,37 @@
-#include "Vibrophone.h"
+#include <M5StickC.h>
+#include "AudioTools.h"
+
 #include "Freq.h"
+#include "config.h"
 
-DacESP32 dac1(GPIO_NUM_26);
-unsigned int freq;
-unsigned int vol;
+extern VolumeStream out;
+extern AudioInfo info;
 
-void freq_setup(unsigned int f) {
-  freq = f;
+SineWaveGenerator<int16_t> sineWave(32000);
+GeneratedSoundStream<int16_t> sound(sineWave);
+StreamCopy copier(out, sound);
+Task task("freq-copy", 10000, 1, 0);
+
+void freq_enable()
+{
+  sineWave.begin(info, DEFAULT_FREQ);
+  task.begin([]()
+             { copier.copy(); });
 }
 
-void freq_enable() {
-  dac1.enable();
-  dac1.outputCW(freq);
+void freq_disable()
+{
+  task.end();
+  sineWave.end();
 }
 
-void freq_disable() {
-  dac1.disable();
+void freq_update(unsigned int freq)
+{
+  sineWave.begin(info, freq);
 }
 
-void freq_update(unsigned int freq_control, unsigned int vol_control) {
-  freq = freq_control;
-  static unsigned int old_freq = 0;
-  if (freq != old_freq) {
-    dac1.setCwFrequency(freq);
-    old_freq = freq;
-  }
-
-  vol = vol_control;
-  static unsigned int old_vol = 0;
-  if (vol != old_vol) {
-    dac_cw_scale_t scale = DAC_CW_SCALE_8;
-    switch (vol / 25)
-    {
-      case 0:
-        scale = DAC_CW_SCALE_1;
-      break;
-      case 1:
-        scale = DAC_CW_SCALE_2;
-      break;
-      case 2:
-        scale = DAC_CW_SCALE_4;
-      break;
-      case 3:
-        scale = DAC_CW_SCALE_8;
-      break;
-    }
-
-    dac1.setCwScale(scale);
-    old_vol = vol;
-  }
-}
-
-void freq_display() {
+void freq_display()
+{
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0);
   M5.Lcd.setRotation(1);
@@ -59,7 +39,6 @@ void freq_display() {
 
   M5.Lcd.println("Frequency");
   M5.Lcd.println("");
-
 
   M5.Lcd.setTextSize(3);
 
