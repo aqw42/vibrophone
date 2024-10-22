@@ -1,4 +1,6 @@
 #include <M5StickC.h>
+#include "AudioTools.h"
+
 #include "Blue.h"
 #include "Freq.h"
 #include "config.h"
@@ -7,7 +9,8 @@
 vibrophone_mode mode = DEFAULT_MODE;
 
 AnalogAudioStream dac;
-VolumeStream out(dac);
+VolumeStream out;
+
 AudioInfo info;
 
 void vibrophone_update_mode()
@@ -65,11 +68,15 @@ void setup() {
   pinMode(MOL1, INPUT);
   pinMode(MOL2, INPUT);
   
-  auto config = dac.defaultConfig(RX_MODE);
+  info = AudioInfo(44100, 2, 16);
+
+  auto config = dac.defaultConfig();
   config.copyFrom(info);
   dac.begin(config);
 
+  out.setOutput(out);
   out.begin(config);
+
 
   if (mode == vibrophone_mode::VIBRO_FREQUENCY)
     blue_enable();

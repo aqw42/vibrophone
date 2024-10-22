@@ -6,7 +6,7 @@
 #include "Blue.h"
 #include "config.h"
 
-
+extern AnalogAudioStream dac;
 extern VolumeStream out;
 extern AudioInfo info;
 
@@ -34,6 +34,7 @@ void blue_enable()
 {
   a2dp_sink.set_stream_reader(a2dp_cb, false);
 
+  eq.setOutput(dac);
   auto &cfg_eq = eq.defaultConfig();
   cfg_eq.copyFrom(info);
 
@@ -44,7 +45,7 @@ void blue_enable()
 
   eq.begin(cfg_eq);
 
-  String name = DEFAULT_BT_NAME + " " + String(VERSION_NUMBER);
+  String name = String(DEFAULT_BT_NAME) + String(" ") + String(VERSION_NUMBER);
   a2dp_sink.start(name.c_str(), true);
 }
 

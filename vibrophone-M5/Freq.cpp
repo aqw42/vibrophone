@@ -4,17 +4,25 @@
 #include "Freq.h"
 #include "config.h"
 
+extern AnalogAudioStream dac;
 extern VolumeStream out;
 extern AudioInfo info;
 
 SineWaveGenerator<int16_t> sineWave(32000);
 GeneratedSoundStream<int16_t> sound(sineWave);
-StreamCopy copier(out, sound);
+StreamCopy copier(dac, sound);
 Task task("freq-copy", 10000, 1, 0);
+
+unsigned int freq;
 
 void freq_enable()
 {
+  freq = DEFAULT_FREQ;
   sineWave.begin(info, DEFAULT_FREQ);
+
+  sound.setAudioInfo(info);
+  sound.begin();
+
   task.begin([]()
              { copier.copy(); });
 }
@@ -22,12 +30,14 @@ void freq_enable()
 void freq_disable()
 {
   task.end();
+  sound.end();
   sineWave.end();
 }
 
-void freq_update(unsigned int freq)
+void freq_update(unsigned int f)
 {
-  sineWave.begin(info, freq);
+  sineWave.begin(info, f);
+  freq = f;
 }
 
 void freq_display()
