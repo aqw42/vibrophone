@@ -32,7 +32,7 @@ void vibrophone_update_mode()
 
 void vibrophone_update_output()
 {
-  unsigned int freq_control = (analogRead(MOL2) * (MAX_FREQ - MIN_FREQ) / 4045) + MIN_FREQ;
+  unsigned int freq_control = map(analogRead(MOL2), 0, 4095, MIN_FREQ, MAX_FREQ);
   static unsigned int old_freq = 0;
   if (abs(static_cast<int>(freq_control - old_freq)) > 2) {
     if (mode == vibrophone_mode::VIBRO_BLUETOOTH)
