@@ -10,7 +10,7 @@ extern AudioInfo info;
 
 SineWaveGenerator<int16_t> sineWave(16000);
 GeneratedSoundStream<int16_t> sound(sineWave);
-StreamCopy copier(dac, sound);
+StreamCopy copier(out, sound);
 Task task("freq-copy", 10000, 1, 0);
 
 unsigned int freq;

@@ -10,7 +10,7 @@ extern AnalogAudioStream dac;
 extern VolumeStream out;
 extern AudioInfo info;
 
-Equilizer3Bands eq(dac);
+Equilizer3Bands eq(out);
 ConfigEquilizer3Bands cfg_eq;
 BluetoothA2DPSink a2dp_sink;
 
