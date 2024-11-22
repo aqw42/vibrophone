@@ -39,9 +39,10 @@ static const char *SPP_TAG = "SPP_TAG";
 #define DAC_BUFFER_SIZE     1024          // Separate DAC buffer size
 
 // Add these near the top with other defines
-#define BUTTON_PIN          GPIO_NUM_4    // Changed from GPIO0 to GPIO4
+#define DEBOUNCE_TIME_MS    200   // Debounce time in milliseconds
+#define BUTTON_PIN          GPIO_NUM_4
 #define PI                 3.14159265359f
-#define SINE_TABLE_SIZE    256
+#define SINE_TABLE_SIZE    1024    // Size of the sine lookup table
 
 static RingbufHandle_t rb = NULL;
 static float volume = 0.8;
@@ -54,10 +55,12 @@ static dac_oneshot_handle_t dac_handle;
 static dac_oneshot_handle_t dac_handle_raw;
 
 // Add these with other static variables
-static bool mode_switch = false;           // For button debouncing
-static volatile bool is_bluetooth_mode = true;  // Mode flag
-static float sine_phase = 0.0f;
-static float sine_table[SINE_TABLE_SIZE];  // Lookup table for sine wave
+static volatile uint32_t last_button_press = 0;
+static volatile bool is_bluetooth_mode = true;
+static float sine_table[SINE_TABLE_SIZE];
+static float phase_accumulator = 0.0f;
+static float phase_increment = 0.0f;
+static uint32_t mode_change_count = 0;  // To track number of mode changes
 
 // Forward declarations
 void audio_processing_task(void *pvParameters);
@@ -147,17 +150,24 @@ static void init_gpio(void) {
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_NEGEDGE
+        .intr_type = GPIO_INTR_ANYEDGE  // Changed to trigger on both edges
     };
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_PIN, button_isr_handler, NULL));
 }
 
-static void button_isr_handler(void* arg) {
-    if (!mode_switch) {  // Simple debouncing
-        is_bluetooth_mode = !is_bluetooth_mode;
-        mode_switch = true;
+static void IRAM_ATTR button_isr_handler(void* arg) {
+    uint32_t current_time = xTaskGetTickCountFromISR() * portTICK_PERIOD_MS;
+    
+    // Only toggle mode on button press (when GPIO is low), not on release
+    if (gpio_get_level(BUTTON_PIN) == 0) {  // Check if button is pressed (LOW)
+        // Check if enough time has passed since last press
+        if ((current_time - last_button_press) > DEBOUNCE_TIME_MS) {
+            is_bluetooth_mode = !is_bluetooth_mode;
+            last_button_press = current_time;
+            mode_change_count++;
+        }
     }
 }
 
@@ -168,19 +178,21 @@ static void init_sine_table(void) {
 }
 
 static float generate_sine_sample(float frequency) {
-    sine_phase += 2.0f * PI * frequency / SAMPLE_RATE;
-    if (sine_phase >= 2.0f * PI) {
-        sine_phase -= 2.0f * PI;
+    // Calculate how much the phase should advance per sample for desired frequency
+    // For example, for 1Hz we need 2*PI radians per second
+    // At 44100Hz sample rate, that means (2*PI*freq)/SAMPLE_RATE radians per sample
+    phase_increment = 2.0f * PI * frequency / SAMPLE_RATE;
+    
+    // Update phase accumulator
+    phase_accumulator += phase_increment;
+    
+    // Keep phase_accumulator in range [0, 2*PI]
+    if (phase_accumulator >= 2.0f * PI) {
+        phase_accumulator -= 2.0f * PI;
     }
     
-    // Use lookup table for better performance
-    float index = (sine_phase * SINE_TABLE_SIZE) / (2.0f * PI);
-    int idx1 = (int)index;
-    int idx2 = (idx1 + 1) % SINE_TABLE_SIZE;
-    float frac = index - idx1;
-    
-    // Linear interpolation between table values
-    return sine_table[idx1] * (1.0f - frac) + sine_table[idx2] * frac;
+    // Generate sine directly (more accurate than table lookup for this application)
+    return sinf(phase_accumulator);
 }
 
 // Add these callback function declarations near the top with other declarations
@@ -251,27 +263,18 @@ void audio_processing_task(void *pvParameters) {
                 vTaskDelay(1);
             }
         } else {
-            // Frequency generator mode - only output to filtered DAC
-            for (int i = 0; i < DAC_BUFFER_SIZE; i++) {
-                float sine_sample = generate_sine_sample(cutoff_frequency);
-                dac_buffer[i] = (uint8_t)((sine_sample * volume * 127.0) + 128.0);
-            }
+            // Sine wave generator mode
+            float sine_sample = generate_sine_sample(cutoff_frequency);
             
-            // Write entire buffer to filtered DAC only
-            for (int i = 0; i < DAC_BUFFER_SIZE; i++) {
-                ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle, dac_buffer[i]));
-            }
+            // Scale sine wave (-1 to 1) to DAC range (0 to 255)
+            uint8_t dac_value = (uint8_t)(((sine_sample + 1.0f) * 127.0f * volume) + 0.5f);
             
-            // More precise timing for sine wave generation
-            TickType_t delay_ticks = pdMS_TO_TICKS(1000 * DAC_BUFFER_SIZE / SAMPLE_RATE);
-            if (delay_ticks == 0) delay_ticks = 1;
-            vTaskDelay(delay_ticks);
-        }
-        
-        // Handle mode switch with minimal delay
-        if (mode_switch) {
-            vTaskDelay(pdMS_TO_TICKS(20));  // Reduced debounce time
-            mode_switch = false;
+            // Output to both DACs
+            ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle, dac_value));
+            ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle_raw, dac_value));
+            
+            // Remove the task delay and use precise timing
+            esp_rom_delay_us(22);  // Approximately 44.1kHz (1/44100 seconds)
         }
     }
 }
@@ -280,23 +283,24 @@ void audio_processing_task(void *pvParameters) {
 void update_filter_parameters() {
     int volume_raw, cutoff_raw;
     
-    // Read potentiometers
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, VOLUME_POT_CHANNEL, &volume_raw));
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, CUTOFF_POT_CHANNEL, &cutoff_raw));
     
-    // Convert to usable values
-    volume = volume_raw / 4095.0;
+    // Update volume (0.0 to 1.0)
+    volume = volume_raw / 4095.0f;
     
     if (is_bluetooth_mode) {
-        cutoff_frequency = 1.0 + (cutoff_raw / 4095.0) * 99.0; // 1-100 Hz for filter
+        // Bluetooth mode: cutoff frequency for filter
+        cutoff_frequency = 1.0f + (cutoff_raw / 4095.0f) * 99.0f; // 1-100 Hz for filter
+        float dt = 1.0f / SAMPLE_RATE;
+        filter_alpha = dt / (1.0f / (2.0f * PI * cutoff_frequency) + dt);
     } else {
-        cutoff_frequency = 1.0 + (cutoff_raw / 4095.0) * 99.0; // 1-100 Hz for sine wave
-    }
-    
-    // Update filter coefficient (only needed in bluetooth mode)
-    if (is_bluetooth_mode) {
-        float dt = 1.0 / SAMPLE_RATE;
-        filter_alpha = dt / (1.0 / (2.0 * M_PI * cutoff_frequency) + dt);
+        // Sine wave mode: frequency for oscillator
+        // Direct mapping: ADC value (0-4095) to frequency (1-100Hz)
+        cutoff_frequency = 1.0f + (cutoff_raw * 99.0f / 4095.0f);
+        
+        // Add debug logging for frequency and ADC value
+        ESP_LOGI(TAG, "ADC: %d, Sine frequency: %.2f Hz", cutoff_raw, cutoff_frequency);
     }
 }
 
@@ -428,6 +432,17 @@ extern "C" {
     void app_main(void);
 }
 
+// Add this function to periodically log mode status
+static void mode_debug_task(void* pvParameters) {
+    while(1) {
+        ESP_LOGI(TAG, "Mode: %s, Changes: %lu, Last press: %lu ms ago", 
+                 is_bluetooth_mode ? "BLUETOOTH" : "SINE WAVE",
+                 mode_change_count,
+                 (xTaskGetTickCount() * portTICK_PERIOD_MS) - last_button_press);
+        vTaskDelay(pdMS_TO_TICKS(1000));  // Log every second
+    }
+}
+
 // Modify app_main()
 void app_main(void) {
     // Initialize components
@@ -469,6 +484,17 @@ void app_main(void) {
         tskIDLE_PRIORITY + 1,  // Just above idle priority
         NULL,
         0  // Run on core 0
+    );
+    
+    // Create mode debug task
+    xTaskCreatePinnedToCore(
+        mode_debug_task,
+        "mode_debug",
+        2048,
+        NULL,
+        1,  // Low priority
+        NULL,
+        0   // Run on core 0
     );
     
     // Delete the original task
