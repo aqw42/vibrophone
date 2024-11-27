@@ -4,7 +4,7 @@
 #include "freertos/ringbuf.h"
 #include "esp_system.h"
 #include "esp_log.h"
-#include "nvs_flash.h"  // Add this for NVS
+#include "nvs_flash.h"
 #include "esp_bt.h"
 #include "esp_bt_main.h"
 #include "esp_bt_device.h"
@@ -20,7 +20,10 @@
 #include "esp_gap_bt_api.h"
 #include "esp_spp_api.h"
 #include "driver/gpio.h"
-#include "esp_rom_sys.h"  // For esp_rom_delay_us
+#include "esp_rom_sys.h"
+#include "esp_task_wdt.h"
+#include "driver/dac_continuous.h"
+#include "soc/dac_channel.h"
 
 static const char *TAG = "BT_SPEAKER";
 static char bda_str[18];
@@ -30,17 +33,20 @@ static const char *SPP_TAG = "SPP_TAG";
 #define VOLUME_POT_CHANNEL     ADC_CHANNEL_6  // GPIO34
 #define CUTOFF_POT_CHANNEL     ADC_CHANNEL_7  // GPIO35
 
+#define MIN_FREQ 1.5f
+#define MAX_FREQ 50.0f
+
 // Define DAC channels
 #define AUDIO_OUTPUT_CHANNEL   DAC_CHAN_0   // GPIO25
 #define AUDIO_OUTPUT_CHANNEL_RAW   DAC_CHAN_1   // GPIO26 for unfiltered audio
 #define SAMPLE_RATE           44100
-#define BUF_SIZE             (2048 * 32)  // Increase to 64KB
-#define SAMPLES_PER_YIELD    512          // Process more samples per batch
-#define DAC_BUFFER_SIZE     1024          // Separate DAC buffer size
+#define BUF_SIZE             (2048 * 8)   // Reduce buffer size to 16KB - large buffers can cause latency
+#define DMA_BUFFER_SIZE      256
+#define DMA_BUFFER_COUNT     3    // Number of DMA buffers to cycle through
 
 // Add these near the top with other defines
-#define DEBOUNCE_TIME_MS    200   // Debounce time in milliseconds
-#define BUTTON_PIN          GPIO_NUM_4
+#define DEBOUNCE_TIME_MS    1000   // Debounce time in milliseconds
+#define BUTTON_PIN          GPIO_NUM_32
 #define PI                 3.14159265359f
 #define SINE_TABLE_SIZE    1024    // Size of the sine lookup table
 
@@ -53,10 +59,14 @@ static float filter_alpha = 0.0;
 static adc_oneshot_unit_handle_t adc1_handle;
 static dac_oneshot_handle_t dac_handle;
 static dac_oneshot_handle_t dac_handle_raw;
+static dac_continuous_handle_t dac_handle = NULL;
+static uint8_t *dma_buffer = NULL;
+static size_t dma_buffer_size = 0;
+static QueueHandle_t dac_event_queue;
 
 // Add these with other static variables
 static volatile uint32_t last_button_press = 0;
-static volatile bool is_bluetooth_mode = true;
+static volatile bool is_bluetooth_mode = false;
 static float sine_table[SINE_TABLE_SIZE];
 static float phase_accumulator = 0.0f;
 static float phase_increment = 0.0f;
@@ -79,19 +89,16 @@ static char *bda2str(const uint8_t *bda, char *str, size_t size)
 // Bluetooth callback function for audio data
 void bt_audio_data_callback(const uint8_t *data, uint32_t len) {
     if (rb && is_bluetooth_mode) {
-        BaseType_t ret = xRingbufferSend(rb, (void*)data, len, pdMS_TO_TICKS(10));
+        BaseType_t ret = xRingbufferSend(rb, (void*)data, len, 0); // No waiting
         if (ret != pdTRUE) {
-            // Clear some old data if buffer is full
+            // If buffer is full, clear half of it
             size_t item_size;
             void *item = xRingbufferReceive(rb, &item_size, 0);
             if (item) {
                 vRingbufferReturnItem(rb, item);
             }
             // Try sending again
-            ret = xRingbufferSend(rb, (void*)data, len, pdMS_TO_TICKS(10));
-            if (ret != pdTRUE) {
-                ESP_LOGW(TAG, "Ring buffer full, dropping %" PRIu32 " bytes", len);
-            }
+            xRingbufferSend(rb, (void*)data, len, 0);
         }
     }
 }
@@ -208,73 +215,101 @@ static void bt_avrc_tg_cb(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *
     ESP_LOGI(TAG, "AVRC target event: %d", event);
 }
 
+// Add this function to handle DAC events
+static bool IRAM_ATTR dac_on_convert_done_callback(dac_continuous_handle_t handle, const dac_event_data_t *event, void *user_data) {
+    BaseType_t high_task_wakeup = pdFALSE;
+    QueueHandle_t queue = (QueueHandle_t)user_data;
+    xQueueSendFromISR(queue, event, &high_task_wakeup);
+    return high_task_wakeup == pdTRUE;
+}
+
+// Add this function to initialize DAC with DMA
+void init_dac_dma() {
+    // DAC continuous mode configuration
+    dac_continuous_config_t cont_cfg = {
+        .chan_mask = DAC_CHANNEL_MASK_ALL,
+        .desc_num = DMA_BUFFER_COUNT,
+        .buf_size = DMA_BUFFER_SIZE,
+        .freq_hz = SAMPLE_RATE,
+        .offset = 0,
+        .clk_src = DAC_DIGI_CLK_SRC_DEFAULT,
+        .chan_mode = DAC_CHANNEL_MODE_SIMUL,
+    };
+    
+    ESP_ERROR_CHECK(dac_continuous_new_channels(&cont_cfg, &dac_handle));
+    
+    // Create event queue
+    dac_event_queue = xQueueCreate(DMA_BUFFER_COUNT, sizeof(dac_event_data_t));
+    assert(dac_event_queue);
+    
+    // Register callback
+    dac_event_callbacks_t cbs = {
+        .on_convert_done = dac_on_convert_done_callback,
+        .on_stop = NULL,
+    };
+    ESP_ERROR_CHECK(dac_continuous_register_event_callback(dac_handle, &cbs, dac_event_queue));
+    
+    // Allocate DMA buffer
+    dma_buffer_size = DMA_BUFFER_SIZE * DMA_BUFFER_COUNT;
+    dma_buffer = (uint8_t *)heap_caps_malloc(dma_buffer_size, MALLOC_CAP_DMA);
+    assert(dma_buffer);
+    
+    // Start DAC output
+    ESP_ERROR_CHECK(dac_continuous_start(dac_handle));
+}
+
 // Modify the audio processing task
 void audio_processing_task(void *pvParameters) {
     size_t item_size;
     uint8_t *data;
     float input_sample;
-    uint8_t dac_buffer[DAC_BUFFER_SIZE];  // For filtered audio
-    uint8_t dac_buffer_raw[DAC_BUFFER_SIZE];  // For raw audio
-    int buffer_index = 0;
-    TickType_t last_yield = xTaskGetTickCount();
-    
-    // Set highest priority for audio task
-    vTaskPrioritySet(NULL, configMAX_PRIORITIES - 1);
+    dac_event_data_t dac_event;
+    uint32_t buf_index = 0;
     
     while (1) {
         if (is_bluetooth_mode) {
-            // Bluetooth audio processing
             data = (uint8_t *)xRingbufferReceive(rb, &item_size, pdMS_TO_TICKS(1));
             if (data) {
-                // Process data in larger chunks
+                // Process data in chunks
                 for (int i = 0; i < item_size; i += 2) {
-                    // Get input sample
-                    input_sample = (float)((int16_t)(data[i] | (data[i+1] << 8))) / 32768.0;
+                    // Convert to proper 16-bit sample (little-endian)
+                    int16_t sample = (int16_t)(data[i] | (data[i+1] << 8));
+                    input_sample = (float)sample / 32768.0f;
                     
-                    // Store raw audio
-                    dac_buffer_raw[buffer_index] = (uint8_t)((input_sample * volume * 127.0) + 128.0);
-                    
-                    // Store filtered audio
+                    // Apply volume and filtering
                     filtered_value = filtered_value + filter_alpha * (input_sample - filtered_value);
-                    dac_buffer[buffer_index] = (uint8_t)((filtered_value * volume * 127.0) + 128.0);
                     
-                    buffer_index++;
+                    // Fill DMA buffer
+                    uint8_t dac_value = (uint8_t)((filtered_value * volume * 127.0f) + 128.0f);
+                    dma_buffer[buf_index++] = dac_value;
                     
-                    // Write to DACs when buffer is full or at end of data
-                    if (buffer_index >= DAC_BUFFER_SIZE || i >= item_size - 2) {
-                        // Write entire buffer to both DACs
-                        for (int j = 0; j < buffer_index; j++) {
-                            ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle, dac_buffer[j]));
-                            ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle_raw, dac_buffer_raw[j]));
-                        }
-                        buffer_index = 0;
+                    // When buffer is full, send it to DAC
+                    if (buf_index >= DMA_BUFFER_SIZE) {
+                        ESP_ERROR_CHECK(dac_continuous_write_cyclically(dac_handle, dma_buffer, DMA_BUFFER_SIZE, NULL));
+                        buf_index = 0;
                         
-                        // Yield only if enough time has passed
-                        TickType_t now = xTaskGetTickCount();
-                        if ((now - last_yield) >= pdMS_TO_TICKS(5)) {
-                            vTaskDelay(1);
-                            last_yield = now;
+                        // Wait for DMA transfer to complete
+                        if (xQueueReceive(dac_event_queue, &dac_event, portMAX_DELAY) != pdTRUE) {
+                            ESP_LOGE(TAG, "Failed to receive DAC event");
                         }
                     }
                 }
                 vRingbufferReturnItem(rb, (void *)data);
-            } else {
-                // No data, minimal yield
-                vTaskDelay(1);
             }
         } else {
-            // Sine wave generator mode
+            // Sine wave generation mode
             float sine_sample = generate_sine_sample(cutoff_frequency);
+            uint8_t dac_value = (uint8_t)((sine_sample + 1.0f) * 127.0f * volume + 0.5f);
+            dma_buffer[buf_index++] = dac_value;
             
-            // Scale sine wave (-1 to 1) to DAC range (0 to 255)
-            uint8_t dac_value = (uint8_t)(((sine_sample + 1.0f) * 127.0f * volume) + 0.5f);
-            
-            // Output to both DACs
-            ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle, dac_value));
-            ESP_ERROR_CHECK(dac_oneshot_output_voltage(dac_handle_raw, dac_value));
-            
-            // Remove the task delay and use precise timing
-            esp_rom_delay_us(22);  // Approximately 44.1kHz (1/44100 seconds)
+            if (buf_index >= DMA_BUFFER_SIZE) {
+                ESP_ERROR_CHECK(dac_continuous_write_cyclically(dac_handle, dma_buffer, DMA_BUFFER_SIZE, NULL));
+                buf_index = 0;
+                
+                if (xQueueReceive(dac_event_queue, &dac_event, portMAX_DELAY) != pdTRUE) {
+                    ESP_LOGE(TAG, "Failed to receive DAC event");
+                }
+            }
         }
     }
 }
@@ -295,12 +330,13 @@ void update_filter_parameters() {
         float dt = 1.0f / SAMPLE_RATE;
         filter_alpha = dt / (1.0f / (2.0f * PI * cutoff_frequency) + dt);
     } else {
-        // Sine wave mode: frequency for oscillator
-        // Direct mapping: ADC value (0-4095) to frequency (1-100Hz)
-        cutoff_frequency = 1.0f + (cutoff_raw * 99.0f / 4095.0f);
+
+        float normalized = cutoff_raw / 4095.0f;
+        cutoff_frequency = MIN_FREQ + (MAX_FREQ - MIN_FREQ) * (expf(normalized * normalized * normalized * logf(2.0f)) - 1.0f);
         
         // Add debug logging for frequency and ADC value
-        ESP_LOGI(TAG, "ADC: %d, Sine frequency: %.2f Hz", cutoff_raw, cutoff_frequency);
+        ESP_LOGI(TAG, "ADC: %d, Normalized: %.3f, Sine frequency: %.2f Hz", 
+                 cutoff_raw, normalized, cutoff_frequency);
     }
 }
 
@@ -414,20 +450,6 @@ void init_adc() {
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, CUTOFF_POT_CHANNEL, &config));
 }
 
-void init_dac() {
-    // Initialize filtered output DAC
-    dac_oneshot_config_t dac_config = {
-        .chan_id = AUDIO_OUTPUT_CHANNEL,
-    };
-    ESP_ERROR_CHECK(dac_oneshot_new_channel(&dac_config, &dac_handle));
-
-    // Initialize raw output DAC
-    dac_oneshot_config_t dac_config_raw = {
-        .chan_id = AUDIO_OUTPUT_CHANNEL_RAW,
-    };
-    ESP_ERROR_CHECK(dac_oneshot_new_channel(&dac_config_raw, &dac_handle_raw));
-}
-
 extern "C" {
     void app_main(void);
 }
@@ -443,12 +465,28 @@ static void mode_debug_task(void* pvParameters) {
     }
 }
 
-// Modify app_main()
+// Add cleanup function
+void cleanup_dac_dma() {
+    if (dac_handle) {
+        dac_continuous_stop(dac_handle);
+        dac_continuous_del_channels(dac_handle);
+    }
+    if (dma_buffer) {
+        heap_caps_free(dma_buffer);
+        dma_buffer = NULL;
+    }
+    if (dac_event_queue) {
+        vQueueDelete(dac_event_queue);
+        dac_event_queue = NULL;
+    }
+}
+
+// Update app_main()
 void app_main(void) {
     // Initialize components
     init_bluetooth();
     init_adc();
-    init_dac();
+    init_dac_dma();  // Use DMA initialization instead of regular DAC init
     init_gpio();
     init_sine_table();
     
