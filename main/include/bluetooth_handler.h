@@ -18,8 +18,12 @@ public:
     void init();
     static void audioDataCallback(const uint8_t *data, uint32_t len);
     static void gapCallback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
+    static void a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param);
+    static void avrcCallback(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param);
 
 private:
     BluetoothHandler() = default;
-    static void a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param);
+    ~BluetoothHandler() = default;
+    BluetoothHandler(const BluetoothHandler&) = delete;
+    BluetoothHandler& operator=(const BluetoothHandler&) = delete;
 }; 

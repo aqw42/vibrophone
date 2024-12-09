@@ -2,6 +2,7 @@
 #include "audio_output.h"
 #include "esp_log.h"
 #include "esp_check.h"
+#include "esp_avrc_api.h"
 
 static const char* TAG = "BT_A2DP";
 static uint8_t s_reconnect_attempts = 0;
@@ -18,6 +19,8 @@ void BluetoothHandler::init() {
     }
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    bt_cfg.mode = ESP_BT_MODE_CLASSIC_BT;
+    bt_cfg.bt_max_acl_conn = 1;
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize controller: %s", esp_err_to_name(ret));
@@ -83,6 +86,19 @@ void BluetoothHandler::init() {
         return;
     }
 
+    // Initialize AVRCP
+    ret = esp_avrc_ct_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize AVRCP controller: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ret = esp_avrc_ct_register_callback(avrcCallback);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register AVRCP callback: %s", esp_err_to_name(ret));
+        return;
+    }
+
     ESP_LOGI(TAG, "A2DP sink initialized successfully, ready for connections");
 }
 
@@ -145,6 +161,22 @@ void BluetoothHandler::gapCallback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_pa
     }
 }
 
+void BluetoothHandler::avrcCallback(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param) {
+    switch (event) {
+        case ESP_AVRC_CT_CONNECTION_STATE_EVT: {
+            ESP_LOGI(TAG, "AVRCP connection state: %d", param->conn_stat.connected);
+            break;
+        }
+        case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT: {
+            ESP_LOGD(TAG, "AVRCP passthrough response: %d", param->psth_rsp.operation_id);
+            break;
+        }
+        default:
+            ESP_LOGV(TAG, "Unhandled AVRCP event: %d", event);
+            break;
+    }
+}
+
 void BluetoothHandler::a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param) {
     switch (event) {
         case ESP_A2D_CONNECTION_STATE_EVT: {
@@ -152,6 +184,7 @@ void BluetoothHandler::a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t
             if (param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED) {
                 ESP_LOGI(TAG, "A2DP connected to device");
                 s_reconnect_attempts = 0;
+                esp_a2d_sink_set_preferred_bit_rate(44100);
             } else if (param->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
                 ESP_LOGI(TAG, "A2DP disconnected from device");
                 if (++s_reconnect_attempts < MAX_RECONNECT_ATTEMPTS) {
@@ -164,9 +197,19 @@ void BluetoothHandler::a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t
         case ESP_A2D_AUDIO_STATE_EVT: {
             const char* state_str;
             switch (param->audio_stat.state) {
-                case ESP_A2D_AUDIO_STATE_STARTED: state_str = "STARTED"; break;
-                case ESP_A2D_AUDIO_STATE_STOPPED: state_str = "STOPPED"; break;
-                default: state_str = "UNKNOWN"; break;
+                case ESP_A2D_AUDIO_STATE_STARTED: 
+                    state_str = "STARTED";
+                    esp_a2d_sink_set_stream_type(ESP_A2D_STREAM_TYPE_MUSIC);
+                    break;
+                case ESP_A2D_AUDIO_STATE_STOPPED: 
+                    state_str = "STOPPED"; 
+                    break;
+                case ESP_A2D_AUDIO_STATE_REMOTE_SUSPEND: 
+                    state_str = "SUSPENDED";
+                    break;
+                default: 
+                    state_str = "UNKNOWN"; 
+                    break;
             }
             ESP_LOGI(TAG, "Audio streaming state: %s", state_str);
             break;
