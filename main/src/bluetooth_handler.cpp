@@ -48,7 +48,7 @@ void BluetoothHandler::init() {
     ESP_LOGI(TAG, "Bluedroid initialized and enabled");
 
     // Set device name
-    ret = esp_bt_dev_set_device_name("ESP32 Bass Speaker");
+    ret = esp_bt_gap_set_device_name("ESP32 Bass Speaker");
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set device name: %s", esp_err_to_name(ret));
         return;
@@ -168,7 +168,7 @@ void BluetoothHandler::avrcCallback(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb
             break;
         }
         case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT: {
-            ESP_LOGD(TAG, "AVRCP passthrough response: %d", param->psth_rsp.operation_id);
+            ESP_LOGD(TAG, "AVRCP passthrough response: %d", param->psth_rsp.tl);
             break;
         }
         default:
@@ -184,7 +184,6 @@ void BluetoothHandler::a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t
             if (param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED) {
                 ESP_LOGI(TAG, "A2DP connected to device");
                 s_reconnect_attempts = 0;
-                esp_a2d_sink_set_preferred_bit_rate(44100);
             } else if (param->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
                 ESP_LOGI(TAG, "A2DP disconnected from device");
                 if (++s_reconnect_attempts < MAX_RECONNECT_ATTEMPTS) {
@@ -199,13 +198,9 @@ void BluetoothHandler::a2dpCallback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t
             switch (param->audio_stat.state) {
                 case ESP_A2D_AUDIO_STATE_STARTED: 
                     state_str = "STARTED";
-                    esp_a2d_sink_set_stream_type(ESP_A2D_STREAM_TYPE_MUSIC);
                     break;
                 case ESP_A2D_AUDIO_STATE_STOPPED: 
                     state_str = "STOPPED"; 
-                    break;
-                case ESP_A2D_AUDIO_STATE_REMOTE_SUSPEND: 
-                    state_str = "SUSPENDED";
                     break;
                 default: 
                     state_str = "UNKNOWN"; 

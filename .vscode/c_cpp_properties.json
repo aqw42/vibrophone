@@ -5,36 +5,37 @@
             "compilerPath": "C:/Users/coren/Documents/esp-idf/Tools/tools/xtensa-esp-elf/esp-13.2.0_20240530/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe",
             "includePath": [
                 "${workspaceFolder}/**",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/**",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/freertos/FreeRTOS-Kernel/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_rom/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_common/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_system/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_driver_gpio/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_driver_dac/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_adc/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_adc/interface",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_adc/esp32/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_hw_support/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_hw_support/include/soc",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_hw_support/include/soc/esp32",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_ringbuf/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/hal/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/hal/esp32/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/hal/platform_port/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/soc/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/soc/esp32/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_rom/include/esp32",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_system/port/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/bt/include/esp32/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/bt/common/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/bt/host/bluedroid/api/include/api",
-                "${workspaceFolder}/build/config"
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/**",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/freertos/FreeRTOS-Kernel/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_rom/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_common/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_system/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_driver_gpio/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_driver_dac/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_adc/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_adc/interface",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_adc/esp32/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_hw_support/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_hw_support/include/soc",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_hw_support/include/soc/esp32",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_ringbuf/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/hal/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/hal/esp32/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/hal/platform_port/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/soc/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/soc/esp32/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_rom/include/esp32",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/esp_system/port/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/bt/include/esp32/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/bt/common/include",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/bt/host/bluedroid/api/include/api",
+                "${workspaceFolder}/build/config",
+                "C:/Users/coren/Documents/esp-idf/v5.3.2/components/freertos/FreeRTOS-Kernel-SMP/portable/xtensa/include/freertos"
             ],
             "browse": {
                 "path": [
                     "${workspaceFolder}",
-                    "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components"
+                    "C:/Users/coren/Documents/esp-idf/v5.3.2/components"
                 ],
                 "limitSymbolsToIncludedHeaders": false
             },
@@ -42,7 +43,7 @@
                 "ESP_PLATFORM",
                 "ESP32",
                 "_GNU_SOURCE",
-                "IDF_VER=\\\"v5.3.1\\\"",
+                "IDF_VER=\\\"v5.3.2\\\"",
                 "PROJECT_NAME=\\\"esp32_bass_speaker\\\"",
                 "PROJECT_VER=\\\"1.0\\\""
             ],
@@ -53,4 +54,4 @@
         }
     ],
     "version": 4
-} 
+}

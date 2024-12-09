@@ -40,8 +40,7 @@ void AudioOutput::init() {
         .freq_hz = SAMPLE_RATE,
         .offset = 0,
         .clk_src = DAC_DIGI_CLK_SRC_DEFAULT,
-        .chan_mode = DAC_CHANNEL_MODE_ALTER,
-        .write_mode = DAC_WRITE_MODE_ASYNC
+        .chan_mode = DAC_CHANNEL_MODE_ALTER
     };
 
     esp_err_t ret = dac_continuous_new_channels(&dac_config, &dacHandle);
@@ -152,11 +151,11 @@ void AudioOutput::audioProcessingTask(void* params) {
         }
         
         size_t written;
-        esp_err_t ret = dac_continuous_write_asynchronously(audio->dacHandle, 
+        esp_err_t ret = dac_continuous_write(audio->dacHandle, 
             audio->stereoBuffer, 
             BUFFER_SIZE * 2, 
             &written, 
-            DAC_CONTINUOUS_TIMEOUT_NEVER);
+            portMAX_DELAY);
         total_writes++;
 
         if (ret != ESP_OK) {
