@@ -10,7 +10,6 @@
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_rom/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_common/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_system/include",
-                "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/driver/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_driver_gpio/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_driver_dac/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/esp_adc/include",
@@ -30,8 +29,7 @@
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/bt/include/esp32/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/bt/common/include",
                 "C:/Users/coren/Documents/esp-idf/v5.3.1/esp-idf/components/bt/host/bluedroid/api/include/api",
-                "${workspaceFolder}/build/config",
-                "${workspaceFolder}/build/config/sdkconfig.h"
+                "${workspaceFolder}/build/config"
             ],
             "browse": {
                 "path": [

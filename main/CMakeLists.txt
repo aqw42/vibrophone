@@ -1,5 +1,20 @@
 idf_component_register(
     SRCS
-    INCLUDE_DIRS "."
-    REQUIRES bt driver esp_adc esp_hw_support freertos nvs_flash esp_system esp_common hal
+        "src/main.cpp"
+        "src/audio_output.cpp"
+        "src/bluetooth_handler.cpp"
+        "src/gpio_config.cpp"
+    INCLUDE_DIRS
+        "include"
+        "."
+    REQUIRES
+        bt
+        driver
+        esp_adc
+        esp_hw_support
+        freertos
+        nvs_flash
+        esp_system
+        esp_common
+        hal
 )
